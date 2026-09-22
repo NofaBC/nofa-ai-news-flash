@@ -42,12 +42,21 @@ Providers monitored
 OpenAI, Anthropic Claude, Google Gemini, xAI Grok, Moonshot Kimi, Z.ai and
 Qwen. See `lib/providers.config.js` for the exact source used per provider:
 
-- OpenAI, Anthropic, xAI: official Atlassian Statuspage `/api/v2/summary.json`
+- OpenAI, Anthropic: official Atlassian Statuspage `/api/v2/summary.json`
   feeds.
 - Moonshot Kimi: official Atlassian Statuspage feed at
   `https://status.moonshot.cn/api/v2/summary.json`. Note: `status.moonshot.ai`
   does not resolve (confirmed via DNS lookup) despite appearing in some
   third-party documentation - the `.cn` domain is Moonshot's real status page.
+- xAI Grok: `status.x.ai` does NOT run Atlassian Statuspage (confirmed - all
+  `/api/v2/*` paths 404). It runs Instatus, which only publishes an RSS
+  incident feed at `https://status.x.ai/feed.xml`. `lib/statusCheckers.js`'s
+  `checkInstatusRss()` parses that feed directly (regex-based, no XML
+  dependency): each `<item>` is one incident with a stable native `<guid>`
+  used for dedup, and an incident counts as active only while its
+  description's `Status:` is not `RESOLVED` and it lacks the `resolved`
+  category. A request with no User-Agent header gets a 403 from Cloudflare;
+  our standard request User-Agent works fine.
 - Google Gemini: Google Cloud's public `incidents.json` feed, filtered to
   Gemini/Vertex AI/Generative AI products.
 - Z.ai and Qwen: no public machine-readable status source is currently
