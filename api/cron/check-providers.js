@@ -16,6 +16,11 @@ module.exports = async (req, res) => {
   }
 
   const db = getFirestore();
+  if (!db) {
+    res.status(200).json({ ok: false, error: 'Firestore initialization failed' });
+    return;
+  }
+
   const results = [];
 
   for (const provider of PROVIDERS) {

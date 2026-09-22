@@ -47,6 +47,18 @@ module.exports = async (req, res) => {
   }
 
   const db = getFirestore();
+  if (!db) {
+    res.status(200).json({
+      configured: true,
+      error: 'Firestore initialization failed - check FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY',
+      providers: PROVIDERS.map((p) => ({ id: p.id, name: p.name, note: p.note, status: 'unknown', stale: true })),
+      providerCount: PROVIDERS.length,
+      reportCount: 0,
+      lastUpdate: null,
+      ticker: 'Firestore connection failed - check server configuration.',
+    });
+    return;
+  }
 
   try {
     const providerSnaps = await db.collection('providers').get();

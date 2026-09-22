@@ -7,6 +7,11 @@ module.exports = async (req, res) => {
   }
 
   const db = getFirestore();
+  if (!db) {
+    res.status(200).json({ configured: true, items: [], error: 'Firestore initialization failed' });
+    return;
+  }
+
   const requestedLimit = Number(req.query && req.query.limit);
   const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 100) : 50;
 

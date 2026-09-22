@@ -23,6 +23,10 @@ module.exports = async (req, res) => {
   }
 
   const db = getFirestore();
+  if (!db) {
+    res.status(200).json({ configured: true, items: [], error: 'Firestore initialization failed' });
+    return;
+  }
 
   if (req.method === 'GET') {
     const [flashesSnap, newsSnap] = await Promise.all([
