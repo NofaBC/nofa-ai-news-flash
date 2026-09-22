@@ -42,8 +42,12 @@ Providers monitored
 OpenAI, Anthropic Claude, Google Gemini, xAI Grok, Moonshot Kimi, Z.ai and
 Qwen. See `lib/providers.config.js` for the exact source used per provider:
 
-- OpenAI, Anthropic, xAI, Moonshot Kimi: official Atlassian Statuspage
-  `/api/v2/summary.json` feeds.
+- OpenAI, Anthropic, xAI: official Atlassian Statuspage `/api/v2/summary.json`
+  feeds.
+- Moonshot Kimi: official Atlassian Statuspage feed at
+  `https://status.moonshot.cn/api/v2/summary.json`. Note: `status.moonshot.ai`
+  does not resolve (confirmed via DNS lookup) despite appearing in some
+  third-party documentation - the `.cn` domain is Moonshot's real status page.
 - Google Gemini: Google Cloud's public `incidents.json` feed, filtered to
   Gemini/Vertex AI/Generative AI products.
 - Z.ai and Qwen: no public machine-readable status source is currently

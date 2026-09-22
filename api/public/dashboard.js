@@ -5,14 +5,19 @@ function iconForType(type) {
   if (type === 'recovery') return '\uD83D\uDFE2'; // green circle
   if (type === 'outage') return '\uD83D\uDD34'; // red circle
   if (type === 'degraded') return '\uD83D\uDFE0'; // orange circle
+  if (type === 'unknown') return '\u26AA'; // white circle - status unavailable, NOT a health signal
   return '\uD83D\uDD35'; // blue circle
 }
 
 // Builds the ticker string using the spec's priority order: major outage >
 // severe degradation > recovery > API/model/platform change > major AI
-// news. Falls back to news, then a static "all healthy" message, so the
-// ticker is never empty.
-function buildTicker(flashes, news) {
+// news. Falls back to news, then a provider-health summary, so the ticker
+// is never empty. The fallback NEVER claims "all operational" unless every
+// monitored provider is actually verified operational (not stale/unknown) -
+// verified-operational and unavailable-status providers are always called
+// out separately so an unknown status (e.g. Z.ai/Qwen with no machine-
+// readable source) is never misrepresented as healthy.
+function buildTicker(flashes, news, providers) {
   const live = flashes.filter((f) => f.active && !f.historical);
   const outages = live.filter((f) => f.type === 'outage');
   const degraded = live.filter((f) => f.type === 'degraded');
@@ -27,7 +32,17 @@ function buildTicker(flashes, news) {
   }
 
   if (!parts.length) {
-    parts.push(`${iconForType('recovery')} All monitored AI providers operational`);
+    const operational = providers.filter((p) => p.status === 'operational' && !p.stale);
+    const unavailable = providers.filter((p) => p.status === 'unknown' || p.stale);
+
+    if (!unavailable.length) {
+      parts.push(`${iconForType('recovery')} All monitored AI providers operational`);
+    } else {
+      if (operational.length) {
+        parts.push(`${iconForType('recovery')} ${operational.map((p) => p.name).join(', ')} verified operational`);
+      }
+      parts.push(`${iconForType('unknown')} ${unavailable.map((p) => p.name).join(', ')} status unavailable`);
+    }
   }
 
   return parts.join('   \u2022   ');
@@ -106,7 +121,7 @@ module.exports = async (req, res) => {
       providerCount: PROVIDERS.length,
       reportCount: activeCount,
       lastUpdate,
-      ticker: buildTicker(flashes, news),
+      ticker: buildTicker(flashes, news, providers),
     });
   } catch (err) {
     res.status(200).json({
