@@ -21,8 +21,11 @@ module.exports = async (req, res) => {
 
   try {
     const result = await ingestNews(db);
+    // Safe to log: contains only counts/source name, never key material.
+    console.log('[cron:ingest-news]', JSON.stringify(result));
     res.status(200).json({ ok: true, ranAt: new Date().toISOString(), ...result });
   } catch (err) {
+    console.error('[cron:ingest-news] failed:', String((err && err.message) || err));
     res.status(200).json({ ok: false, error: String((err && err.message) || err) });
   }
 };
