@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>NOFA AI News Flash - Admin</title>
+<style>
+  :root{--bg:#07111f;--panel:#0d1b2a;--text:#edf4ff;--muted:#9fb4ca;--line:#1f3852;--accent:#5bd1ff;--green:#4ee38a;--amber:#ffc857;--red:#ff5d6c}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#06101c;color:var(--text);min-height:100vh}
+  .wrap{max-width:1100px;margin:auto;padding:32px 20px}
+  h1{font-size:22px;margin:0 0 20px}
+  .login-box{max-width:360px;margin:80px auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px}
+  .login-box input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0a1725;color:var(--text);margin:10px 0}
+  .login-box button,.card button{background:var(--accent);color:#04111a;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
+  .error{color:var(--red);font-size:13px;min-height:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+  .card-top{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px}
+  .badge{font-size:11px;font-weight:800;text-transform:uppercase;padding:4px 8px;border-radius:999px;background:#142b42}
+  .badge.approved{background:rgba(78,227,138,.15);color:var(--green)}
+  .badge.pending{background:rgba(255,200,87,.15);color:var(--amber)}
+  .badge.inactive{background:rgba(255,93,108,.15);color:var(--red)}
+  textarea,input.field{width:100%;background:#0a1725;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;margin:4px 0;font-family:inherit;font-size:13px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .actions button{background:#142b42;color:var(--text);border:1px solid #28445f}
+  .actions button.primary{background:var(--accent);color:#04111a;border:0}
+  .muted{color:var(--muted);font-size:12px}
+  #logoutBtn{float:right}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+  <div id="loginView" class="login-box">
+    <h1>Admin Login</h1>
+    <input id="passwordInput" type="password" placeholder="Admin password" />
+    <button id="loginBtn">Sign in</button>
+    <div id="loginError" class="error"></div>
+  </div>
+
+  <div id="adminView" class="wrap hidden">
+    <h1>NOFA AI News Flash - Moderation <button id="logoutBtn">Log out</button></h1>
+    <p class="muted">Provider flashes auto-publish from official sources. News items require approval before they appear on the public site.</p>
+    <div id="items"></div>
+  </div>
+
+<script>
+const loginView = document.getElementById('loginView');
+const adminView = document.getElementById('adminView');
+const itemsEl = document.getElementById('items');
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function statusBadges(item) {
+  const badges = [];
+  badges.push(`<span class="badge ${item.approved ? 'approved' : 'pending'}">${item.approved ? 'Approved' : 'Pending review'}</span>`);
+  if (item.active === false) badges.push('<span class="badge inactive">Inactive</span>');
+  if (item.pinned) badges.push('<span class="badge">Pinned</span>');
+  if (item.historical) badges.push('<span class="badge">Historical</span>');
+  return badges.join(' ');
+}
+
+function renderItems(items) {
+  itemsEl.innerHTML = items.map((item, idx) => `
+    <div class="card" data-idx="${idx}">
+      <div class="card-top">
+        <div><strong>${escapeHtml(item.provider || 'AI News')}</strong> <span class="muted">${escapeHtml(item.collection)} / ${escapeHtml(item.type || 'news')}</span></div>
+        <div>${statusBadges(item)}</div>
+      </div>
+      <input class="field" data-field="headline" value="${escapeHtml(item.headline)}" />
+      <textarea data-field="summary" rows="2">${escapeHtml(item.summary)}</textarea>
+      ${item.collection === 'flashes' ? `<textarea data-field="developerImpact" rows="2" placeholder="Developer impact">${escapeHtml(item.developerImpact)}</textarea>
+      <textarea data-field="recommendedAction" rows="2" placeholder="Recommended action">${escapeHtml(item.recommendedAction)}</textarea>` : ''}
+      <div class="actions">
+        <button class="primary" data-action="save">Save edits</button>
+        <button data-action="toggle-approved">${item.approved ? 'Unapprove' : 'Approve'}</button>
+        <button data-action="toggle-active">${item.active === false ? 'Unhide' : 'Hide'}</button>
+        <button data-action="toggle-pinned">${item.pinned ? 'Unpin' : 'Pin'}</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+let currentItems = [];
+
+async function loadItems() {
+  const res = await fetch('/api/admin/flashes');
+  if (res.status === 401) {
+    showLogin();
+    return;
+  }
+  const data = await res.json();
+  currentItems = data.items || [];
+  renderItems(currentItems);
+}
+
+async function patchItem(collection, id, updates) {
+  await fetch('/api/admin/flashes', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ collection, id, updates }),
+  });
+}
+
+itemsEl.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const card = btn.closest('.card');
+  const idx = Number(card.dataset.idx);
+  const item = currentItems[idx];
+  if (!item) return;
+
+  if (btn.dataset.action === 'save') {
+    const updates = {};
+    card.querySelectorAll('[data-field]').forEach((el) => { updates[el.dataset.field] = el.value; });
+    await patchItem(item.collection, item.id, updates);
+  } else if (btn.dataset.action === 'toggle-approved') {
+    await patchItem(item.collection, item.id, { approved: !item.approved });
+  } else if (btn.dataset.action === 'toggle-active') {
+    await patchItem(item.collection, item.id, { active: item.active === false });
+  } else if (btn.dataset.action === 'toggle-pinned') {
+    await patchItem(item.collection, item.id, { pinned: !item.pinned });
+  }
+  loadItems();
+});
+
+function showLogin() {
+  loginView.classList.remove('hidden');
+  adminView.classList.add('hidden');
+}
+function showAdmin() {
+  loginView.classList.add('hidden');
+  adminView.classList.remove('hidden');
+  loadItems();
+}
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const password = document.getElementById('passwordInput').value;
+  const errorEl = document.getElementById('loginError');
+  errorEl.textContent = '';
+  const res = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (res.ok) {
+    showAdmin();
+  } else {
+    errorEl.textContent = 'Invalid password.';
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/admin/logout', { method: 'POST' });
+  showLogin();
+});
+
+// Attempt to load items on first paint - if the session cookie is already
+// valid this skips straight to the admin view.
+loadItems().catch(() => showLogin());
+</script>
+</body>
+</html>

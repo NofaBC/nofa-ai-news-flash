@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/cron/check-providers", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/ingest-news", "schedule": "*/12 * * * *" }
+  ],
+  "functions": {
+    "api/cron/*.js": { "maxDuration": 30 },
+    "api/public/*.js": { "maxDuration": 15 },
+    "api/admin/*.js": { "maxDuration": 15 }
+  }
+}

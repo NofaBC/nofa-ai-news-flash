@@ -1,0 +1,15 @@
+{
+  "name": "nofa-ai-news-flash",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NOFA AI News Flash - live AI provider status monitoring and developer intelligence platform.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "seed:historical": "node scripts/seed-historical.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.4.0"
+  }
+}
