@@ -1,5 +1,5 @@
 const PROVIDERS = require('../../lib/providers.config');
-const { getFirestore, isConfigured } = require('../../lib/firebaseAdmin');
+const { getFirestore, isConfigured, getInitError } = require('../../lib/firebaseAdmin');
 
 function iconForType(type) {
   if (type === 'recovery') return '\uD83D\uDFE2'; // green circle
@@ -50,7 +50,7 @@ module.exports = async (req, res) => {
   if (!db) {
     res.status(200).json({
       configured: true,
-      error: 'Firestore initialization failed - check FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY',
+      error: `Firestore initialization failed: ${getInitError() || 'unknown error - check FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY'}`,
       providers: PROVIDERS.map((p) => ({ id: p.id, name: p.name, note: p.note, status: 'unknown', stale: true })),
       providerCount: PROVIDERS.length,
       reportCount: 0,
