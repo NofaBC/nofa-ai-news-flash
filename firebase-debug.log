@@ -1,0 +1,44 @@
+[debug] [2026-09-22T19:52:00.155Z] ----------------------------------------------------------------------
+[debug] [2026-09-22T19:52:00.157Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js projects:list
+[debug] [2026-09-22T19:52:00.157Z] CLI Version:   15.1.0
+[debug] [2026-09-22T19:52:00.157Z] Platform:      win32
+[debug] [2026-09-22T19:52:00.157Z] Node Version:  v22.5.1
+[debug] [2026-09-22T19:52:00.158Z] Time:          Tue Sep 22 2026 15:52:00 GMT-0400 (Eastern Daylight Time)
+[debug] [2026-09-22T19:52:00.158Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-22T19:52:00.161Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-09-22T19:52:00.222Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-22T19:52:00.223Z] > authorizing via signed-in user (farhad@nofabusinessconsulting.com)
+[debug] [2026-09-22T19:52:00.228Z] Checked if tokens are valid: false, expires at: 1784126158268
+[debug] [2026-09-22T19:52:00.229Z] Checked if tokens are valid: false, expires at: 1784126158268
+[debug] [2026-09-22T19:52:00.229Z] > refreshing access token with scopes: []
+[debug] [2026-09-22T19:52:00.230Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-22T19:52:00.230Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-22T19:52:00.338Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-09-22T19:52:00.338Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-09-22T19:52:00.378Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 400
+[debug] [2026-09-22T19:52:00.379Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-09-22T19:52:00.380Z] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-09-22T19:52:00.460Z] FirebaseError: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+    at invalidCredentialError (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:167:12)
+    at refreshTokens (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:591:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getAccessToken (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:42:18)
+    at async Client.addAuthHeader (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:169:21)
+    at async Client.request (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:120:34)
+    at async getProjectPage (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:279:17)
+    at async getFirebaseProjectPage (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:296:23)
+    at async listFirebaseProjects (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:327:29)
+    at async Command.actionFn (C:\Users\fnass\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\projects-list.js:51:20)
+[error] 
+[error] Error: Failed to list Firebase projects. See firebase-debug.log for more info.
