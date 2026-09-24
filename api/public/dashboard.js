@@ -1,52 +1,12 @@
 const PROVIDERS = require('../../lib/providers.config');
 const { getFirestore, isConfigured, getInitError } = require('../../lib/firebaseAdmin');
-
-function iconForType(type) {
-  if (type === 'recovery') return '\uD83D\uDFE2'; // green circle
-  if (type === 'outage') return '\uD83D\uDD34'; // red circle
-  if (type === 'degraded') return '\uD83D\uDFE0'; // orange circle
-  if (type === 'unknown') return '\u26AA'; // white circle - status unavailable, NOT a health signal
-  return '\uD83D\uDD35'; // blue circle
-}
-
-// Builds the ticker string using the spec's priority order: major outage >
-// severe degradation > recovery > API/model/platform change > major AI
-// news. Falls back to news, then a provider-health summary, so the ticker
-// is never empty. The fallback NEVER claims "all operational" unless every
-// monitored provider is actually verified operational (not stale/unknown) -
-// verified-operational and unavailable-status providers are always called
-// out separately so an unknown status (e.g. Z.ai/Qwen with no machine-
-// readable source) is never misrepresented as healthy.
-function buildTicker(flashes, news, providers) {
-  const live = flashes.filter((f) => f.active && !f.historical);
-  const outages = live.filter((f) => f.type === 'outage');
-  const degraded = live.filter((f) => f.type === 'degraded');
-  const recoveries = live.filter((f) => f.type === 'recovery');
-  const updates = live.filter((f) => f.type === 'update');
-
-  const ordered = [...outages, ...degraded, ...recoveries, ...updates];
-  const parts = ordered.slice(0, 4).map((f) => `${iconForType(f.type)} ${f.provider}: ${f.headline}`);
-
-  if (!parts.length) {
-    news.slice(0, 4).forEach((n) => parts.push(`${iconForType('news')} ${n.provider || 'AI News'}: ${n.headline}`));
-  }
-
-  if (!parts.length) {
-    const operational = providers.filter((p) => p.status === 'operational' && !p.stale);
-    const unavailable = providers.filter((p) => p.status === 'unknown' || p.stale);
-
-    if (!unavailable.length) {
-      parts.push(`${iconForType('recovery')} All monitored AI providers operational`);
-    } else {
-      if (operational.length) {
-        parts.push(`${iconForType('recovery')} ${operational.map((p) => p.name).join(', ')} verified operational`);
-      }
-      parts.push(`${iconForType('unknown')} ${unavailable.map((p) => p.name).join(', ')} status unavailable`);
-    }
-  }
-
-  return parts.join('   \u2022   ');
-}
+const {
+  computeDashboardPayload,
+  CACHE_COLLECTION,
+  DASHBOARD_DOC_ID,
+  DASHBOARD_MAX_AGE_MS,
+  isCacheFresh,
+} = require('../../lib/cache');
 
 module.exports = async (req, res) => {
   if (!isConfigured()) {
@@ -75,54 +35,34 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Browsers still re-fetch every 60s (no visible behavior change), but
+  // Vercel's edge collapses concurrent requests from multiple visitors
+  // within this window into a single backend/Firestore hit.
+  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=20, stale-while-revalidate=40');
+
   try {
-    const providerSnaps = await db.collection('providers').get();
-    const providerMap = {};
-    providerSnaps.forEach((doc) => {
-      providerMap[doc.id] = doc.data();
-    });
+    const cacheSnap = await db.collection(CACHE_COLLECTION).doc(DASHBOARD_DOC_ID).get();
+    const cacheData = cacheSnap.exists ? cacheSnap.data() : null;
 
-    const providers = PROVIDERS.map((p) => {
-      const d = providerMap[p.id];
-      return {
-        id: p.id,
-        name: p.name,
-        note: p.note,
-        status: d ? d.status : 'unknown',
-        affectedServices: d ? d.affectedServices || [] : [],
-        stale: d ? Boolean(d.stale) : true,
-        lastChecked: d ? d.lastChecked : null,
-        sourceUrl: d ? d.sourceUrl : p.sourceUrl,
-      };
-    });
+    if (isCacheFresh(cacheData, DASHBOARD_MAX_AGE_MS)) {
+      res.status(200).json({
+        configured: true,
+        providers: cacheData.providers,
+        providerCount: cacheData.providerCount,
+        reportCount: cacheData.reportCount,
+        lastUpdate: cacheData.lastUpdate,
+        ticker: cacheData.ticker,
+      });
+      return;
+    }
 
-    const [flashesSnap, newsSnap] = await Promise.all([
-      db
-        .collection('flashes')
-        .where('historical', '==', false)
-        .where('approved', '==', true)
-        .orderBy('publishedAt', 'desc')
-        .limit(30)
-        .get(),
-      db.collection('news').where('approved', '==', true).orderBy('publishedAt', 'desc').limit(10).get(),
-    ]);
-
-    const flashes = flashesSnap.docs.map((d) => d.data());
-    const news = newsSnap.docs.map((d) => d.data());
-
-    const activeCount = flashes.filter((f) => f.active).length + news.filter((n) => n.active).length;
-
-    const lastUpdateCandidates = providers.map((p) => p.lastChecked).filter(Boolean).sort();
-    const lastUpdate = lastUpdateCandidates.length ? lastUpdateCandidates[lastUpdateCandidates.length - 1] : null;
-
-    res.status(200).json({
-      configured: true,
-      providers,
-      providerCount: PROVIDERS.length,
-      reportCount: activeCount,
-      lastUpdate,
-      ticker: buildTicker(flashes, news, providers),
-    });
+    // Cache missing/stale/schema-mismatched (e.g. right after this
+    // deploy, before the first cron tick): fall back to a live
+    // computation so the public site never shows blank/broken data. The
+    // cache self-heals on the next check-providers cron tick (<=5 min)
+    // or the next admin moderation action.
+    const payload = await computeDashboardPayload(db);
+    res.status(200).json({ configured: true, ...payload });
   } catch (err) {
     res.status(200).json({
       configured: true,

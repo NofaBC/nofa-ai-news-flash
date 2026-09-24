@@ -1,4 +1,10 @@
 const { getFirestore, isConfigured } = require('../../lib/firebaseAdmin');
+const {
+  computePublicFeedPayload,
+  CACHE_COLLECTION,
+  PUBLIC_FEED_DOC_ID,
+  isCacheFresh,
+} = require('../../lib/cache');
 
 module.exports = async (req, res) => {
   if (!isConfigured()) {
@@ -12,23 +18,32 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Browsers still re-fetch every 60s (no visible behavior change), but
+  // Vercel's edge collapses concurrent requests from multiple visitors
+  // within this window into a single backend/Firestore hit.
+  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=20, stale-while-revalidate=40');
+
   const requestedLimit = Number(req.query && req.query.limit);
   const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 100) : 50;
 
   try {
-    const [flashesSnap, newsSnap] = await Promise.all([
-      db.collection('flashes').where('approved', '==', true).orderBy('publishedAt', 'desc').limit(limit).get(),
-      db.collection('news').where('approved', '==', true).orderBy('publishedAt', 'desc').limit(limit).get(),
-    ]);
+    const cacheSnap = await db.collection(CACHE_COLLECTION).doc(PUBLIC_FEED_DOC_ID).get();
+    const cacheData = cacheSnap.exists ? cacheSnap.data() : null;
 
-    const flashItems = flashesSnap.docs.map((d) => ({ id: d.id, kind: 'flash', ...d.data() }));
-    const newsItems = newsSnap.docs.map((d) => ({ id: d.id, ...d.data(), kind: 'news', type: 'update' }));
+    // publicFeed has no time-based staleness check: it's only recomputed
+    // when the underlying approved content actually changes (a new flash
+    // or an admin moderation action), so "old but unchanged" is the
+    // normal, correct state - only existence/schema are validated here.
+    if (isCacheFresh(cacheData, null) && Array.isArray(cacheData.items)) {
+      res.status(200).json({ configured: true, items: cacheData.items.slice(0, limit) });
+      return;
+    }
 
-    const items = [...flashItems, ...newsItems]
-      .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
-      .slice(0, limit);
-
-    res.status(200).json({ configured: true, items });
+    // Cache missing/schema-mismatched (e.g. right after this deploy):
+    // fall back to a live computation. Self-heals on the next flash-
+    // creating cron tick or admin moderation action.
+    const payload = await computePublicFeedPayload(db, limit);
+    res.status(200).json({ configured: true, ...payload });
   } catch (err) {
     res.status(200).json({ configured: true, items: [], error: String((err && err.message) || err) });
   }

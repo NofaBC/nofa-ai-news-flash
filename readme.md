@@ -96,6 +96,49 @@ Data model (Firestore)
 - `news/{urlHash}` - AI industry news, keyed by a hash of the article URL so
   duplicate cron runs can never double-insert the same story. Kept separate
   from `flashes` so the two feeds can be ranked/moderated independently.
+- `cache/dashboard` and `cache/publicFeed` - precomputed, compact documents
+  the public routes read instead of re-querying the collections above on
+  every request (see "Read-optimization cache layer" below).
+
+Read-optimization cache layer
+
+`/api/public/dashboard` and `/api/public/flashes` are polled by every
+visitor every 60 seconds. Querying `providers`/`flashes`/`news` directly on
+every poll does not scale (this is what exhausted the Firestore Spark daily
+quota once). Instead, `lib/cache.js` precomputes two small documents and
+the public routes read only those:
+
+- `cache/dashboard` mirrors `/api/public/dashboard`'s exact response
+  (`providers`, `providerCount`, `reportCount`, `lastUpdate`, `ticker`).
+  Recomputed once at the end of every `check-providers` cron run (every 5
+  minutes), which is what keeps `lastChecked` fresh, and again after any
+  admin moderation action.
+- `cache/publicFeed` mirrors `/api/public/flashes`'s merged, sorted feed
+  (top 100 approved items; the route slices to the requested `?limit=` in
+  memory, so pagination behavior is unchanged). Recomputed only when the
+  underlying approved content actually changes - a new flash during
+  `check-providers`, or an admin moderation action - never on a routine
+  "nothing changed" cron tick, and never by `ingest-news` (unapproved news
+  can't affect what's public yet).
+- Both documents carry a `schemaVersion` and `generatedAt`. The public
+  routes treat a missing doc, a `schemaVersion` mismatch, or (for
+  `cache/dashboard` only) a `generatedAt` older than 15 minutes as "no
+  usable cache" and transparently fall back to the original live
+  multi-query computation (same functions, shared via `lib/cache.js`, so
+  the two code paths can never return different data). `cache/publicFeed`
+  has no time-based staleness check - it is only recomputed when content
+  changes, so "old but unchanged" is its normal, correct state.
+- `cache/publicFeed` is capped and, defensively, byte-budgeted well under
+  Firestore's 1 MiB document limit; if ever exceeded it trims the oldest
+  items and logs a warning rather than failing to write.
+- Every recompute is logged (`[cache] dashboard recomputed ...` /
+  `[cache] publicFeed recomputed ...`) with item counts and duration, and
+  never throws - a cache-write failure never fails the parent cron run or
+  admin request.
+- Both public routes also set a short edge Cache-Control header
+  (`s-maxage=20, stale-while-revalidate=40`) so multiple concurrent
+  visitors within the same ~20s window are served from Vercel's CDN
+  instead of each triggering a separate Firestore read.
 
 Deduplication
 
@@ -190,6 +233,10 @@ Setup
    - Set `ADMIN_SECRET` in Vercel to a strong shared password.
    - Visit `/admin.html` (not linked from the public site) and sign in with
      that password to approve/hide/pin/edit flashes and news.
+   - The moderation list loads the 50 most recent items per collection by
+     default (`GET /api/admin/flashes?limit=N`, capped at 200) rather than
+     hundreds at once; pass a higher `limit` if you ever need to look
+     further back.
 
 5. Historical data (optional, one-time)
 

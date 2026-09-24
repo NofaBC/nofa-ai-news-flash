@@ -1,5 +1,6 @@
 const { getFirestore, isConfigured } = require('../../lib/firebaseAdmin');
 const { isAuthenticated } = require('../../lib/adminAuth');
+const { recomputeDashboardCache, recomputePublicFeedCache } = require('../../lib/cache');
 
 const ALLOWED_FIELDS = [
   'approved',
@@ -10,6 +11,13 @@ const ALLOWED_FIELDS = [
   'developerImpact',
   'recommendedAction',
 ];
+
+// Default page size for the moderation list. The admin UI has no explicit
+// pagination controls, but supports a manual ?limit= override (capped at
+// MAX_LIMIT) if a larger fetch is ever needed - this just avoids loading
+// hundreds of records by default on every page load.
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 200;
 
 module.exports = async (req, res) => {
   if (!isAuthenticated(req)) {
@@ -30,9 +38,12 @@ module.exports = async (req, res) => {
 
   if (req.method === 'GET') {
     try {
+      const requestedLimit = Number(req.query && req.query.limit);
+      const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, MAX_LIMIT) : DEFAULT_LIMIT;
+
       const [flashesSnap, newsSnap] = await Promise.all([
-        db.collection('flashes').orderBy('publishedAt', 'desc').limit(200).get(),
-        db.collection('news').orderBy('publishedAt', 'desc').limit(200).get(),
+        db.collection('flashes').orderBy('publishedAt', 'desc').limit(limit).get(),
+        db.collection('news').orderBy('publishedAt', 'desc').limit(limit).get(),
       ]);
 
       const items = [
@@ -79,6 +90,11 @@ module.exports = async (req, res) => {
 
     try {
       await db.collection(collection).doc(id).set(safeUpdates, { merge: true });
+      // Keep the public caches in sync immediately so moderation actions
+      // (approve/hide/pin/edit) show up on the next 60s poll instead of
+      // waiting for the next provider/news cron tick.
+      await recomputeDashboardCache(db);
+      await recomputePublicFeedCache(db);
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error('[admin:flashes] PATCH failed:', String((err && err.message) || err));
