@@ -29,17 +29,25 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === 'GET') {
-    const [flashesSnap, newsSnap] = await Promise.all([
-      db.collection('flashes').orderBy('publishedAt', 'desc').limit(200).get(),
-      db.collection('news').orderBy('publishedAt', 'desc').limit(200).get(),
-    ]);
+    try {
+      const [flashesSnap, newsSnap] = await Promise.all([
+        db.collection('flashes').orderBy('publishedAt', 'desc').limit(200).get(),
+        db.collection('news').orderBy('publishedAt', 'desc').limit(200).get(),
+      ]);
 
-    const items = [
-      ...flashesSnap.docs.map((d) => ({ id: d.id, collection: 'flashes', ...d.data() })),
-      ...newsSnap.docs.map((d) => ({ id: d.id, collection: 'news', ...d.data() })),
-    ].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+      const items = [
+        ...flashesSnap.docs.map((d) => ({ id: d.id, collection: 'flashes', ...d.data() })),
+        ...newsSnap.docs.map((d) => ({ id: d.id, collection: 'news', ...d.data() })),
+      ].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
 
-    res.status(200).json({ configured: true, items });
+      res.status(200).json({ configured: true, items });
+    } catch (err) {
+      // Never let a Firestore error (e.g. RESOURCE_EXHAUSTED) crash this
+      // function - always return clean JSON so admin.html can show a
+      // real error instead of silently rendering nothing.
+      console.error('[admin:flashes] GET failed:', String((err && err.message) || err));
+      res.status(200).json({ configured: true, items: [], error: String((err && err.message) || err) });
+    }
     return;
   }
 
@@ -69,8 +77,13 @@ module.exports = async (req, res) => {
       return;
     }
 
-    await db.collection(collection).doc(id).set(safeUpdates, { merge: true });
-    res.status(200).json({ ok: true });
+    try {
+      await db.collection(collection).doc(id).set(safeUpdates, { merge: true });
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error('[admin:flashes] PATCH failed:', String((err && err.message) || err));
+      res.status(200).json({ ok: false, error: String((err && err.message) || err) });
+    }
     return;
   }
 

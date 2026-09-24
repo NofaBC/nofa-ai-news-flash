@@ -41,6 +41,7 @@
   <div id="adminView" class="wrap hidden">
     <h1>NOFA AI News Flash - Moderation <button id="logoutBtn">Log out</button></h1>
     <p class="muted">Provider flashes auto-publish from official sources. News items require approval before they appear on the public site.</p>
+    <div id="loadError" class="error" style="margin-bottom:12px"></div>
     <div id="items"></div>
   </div>
 
@@ -84,24 +85,66 @@ function renderItems(items) {
 }
 
 let currentItems = [];
+const loadErrorEl = document.getElementById('loadError');
 
 async function loadItems() {
-  const res = await fetch('/api/admin/flashes');
+  loadErrorEl.textContent = '';
+  let res;
+  try {
+    res = await fetch('/api/admin/flashes');
+  } catch (err) {
+    loadErrorEl.textContent = `Network error loading items: ${err.message}. `;
+    addRetryLink();
+    return;
+  }
+
   if (res.status === 401) {
     showLogin();
     return;
   }
-  const data = await res.json();
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (err) {
+    loadErrorEl.textContent = `Server returned an unexpected response (HTTP ${res.status}). `;
+    addRetryLink();
+    return;
+  }
+
+  if (data.error) {
+    loadErrorEl.textContent = `Could not load items: ${data.error}. `;
+    addRetryLink();
+    itemsEl.innerHTML = '';
+    return;
+  }
+
   currentItems = data.items || [];
   renderItems(currentItems);
 }
 
+function addRetryLink() {
+  const retry = document.createElement('a');
+  retry.href = '#';
+  retry.textContent = 'Retry';
+  retry.addEventListener('click', (e) => { e.preventDefault(); loadItems(); });
+  loadErrorEl.appendChild(retry);
+}
+
 async function patchItem(collection, id, updates) {
-  await fetch('/api/admin/flashes', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ collection, id, updates }),
-  });
+  try {
+    const res = await fetch('/api/admin/flashes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ collection, id, updates }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) {
+      loadErrorEl.textContent = `Update failed: ${data.error || res.status}`;
+    }
+  } catch (err) {
+    loadErrorEl.textContent = `Update failed: ${err.message}`;
+  }
 }
 
 itemsEl.addEventListener('click', async (e) => {
